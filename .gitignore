@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Hardhat files
+/artifacts
+/cache
+/coverage
+/coverage.json
+/typechain-types
+/gas-report.txt
+
+# Environment variables
+.env
+.env.local
+
+# Test files
+*.test.js
+*.test.cjs
+*.test-dbg.sol
+
+# Remix files (if any)
+.editorconfig
+
+# VS Code files (if any)
+.vscode/
+
+# Custom temporary/archive folders (add if you create them)
+_archive_contract/
+_archive_old_html_files/
+flat/
+archive_contract/
+abi/ 
