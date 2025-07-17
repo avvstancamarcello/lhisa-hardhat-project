@@ -4454,134 +4454,361 @@ abstract contract ERC1155URIStorage is ERC1155 {
 }
 
 
-// File contracts/LHISA_Lecce_NFT.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
-// Original license: SPDX_License_Identifier: MIT
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol";
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
-
-
-contract LHISA_LecceNFT is ERC1155URIStorage, Ownable {
-    using Strings for uint256;
-
+contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard, ERC2981 {
     string public name = "LHISA-LecceNFT";
     string public symbol = "LHISA";
 
     mapping(uint256 => uint256) public maxSupply;
     mapping(uint256 => uint256) public totalMinted;
-    mapping(uint256 => string) public tokenCIDs;
-    mapping(uint256 => string) public encryptedURIs;
+    mapping(uint256 => uint256) public pricesInWei;
     mapping(uint256 => bool) public isValidTokenId;
+    mapping(uint256 => string) public encryptedURIs;
+    mapping(uint256 => string) public tokenCIDs;
 
-    uint256 public eurToWei; // es: 1e15 = 0.001 ETH/MATIC per 1 EUR
+    address public withdrawWallet;
     address public creatorWallet;
-    uint256 public creatorSharePercentage = 6;
+    uint256 public creatorSharePercentage;
 
     string public baseURI;
 
-    event NFTMinted(address indexed buyer, uint256 tokenId, uint256 quantity, uint256 pricePerNFT, string encryptedURI);
-    event CreatorShareTransferred(address indexed receiver, uint256 amount);
-    event ConversionRateUpdated(uint256 newRate);
+    // --- Whitelist ---
+    bool public whitelistActive = false;
+    mapping(address => bool) public whitelist;
+
+    // --- Limitazione mint tokenID 100 ---
+    bool public limitToken100Active;
+    mapping(address => uint256) public lastMintTimeToken100;
+    mapping(address => uint256) public mintedToken100Last24h;
+
+    // --- Governance ---
+    struct Proposal {
+        string description;
+        uint256 startTime;
+        uint256 endTime;
+        uint256 yesVotes;
+        uint256 noVotes;
+        bool active;
+        mapping(address => uint256) balancesSnapshot;
+    }
+    mapping(uint256 => Proposal) public proposals;
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    uint256 public nextProposalId;
+
+    struct BurnRequest {
+        address requester;
+        uint256 tokenId;
+        uint256 quantity;
+        bool approved;
+    }
+    BurnRequest[] public burnRequests;
+
+    uint256 public constant MINIMUM_TOTAL_VALUE = 84000;
+
+    // --- Eventi ---
+    event NFTMinted(address indexed buyer, uint256 tokenId, uint256 quantity, uint256 price, string encryptedURI);
+    event FundsWithdrawn(address indexed owner, uint256 amount);
     event BaseURIUpdated(string newBaseURI);
+    event TokenCIDUpdated(uint256 indexed tokenId, string newCID);
+    event TokenCIDsUpdated(uint256[] tokenIds, string[] newCIDs);
+    event EncryptedURIUpdated(uint256 indexed tokenId, string newEncryptedURI);
+    event EncryptedURIsUpdated(uint256[] tokenIds, string[] newEncryptedURIs);
+    event NFTBurned(address indexed owner, uint256 tokenId, uint256 quantity);
+    event BurnRequested(address indexed requester, uint256 tokenId, uint256 quantity, uint256 requestId);
+    event BurnApproved(uint256 requestId, address indexed requester, uint256 tokenId, uint256 quantity);
+    event BurnDenied(uint256 requestId, address indexed requester, uint256 tokenId, uint256 quantity);
+    event CreatorShareTransferred(address indexed receiver, uint256 amount);
+    event ProposalCreated(uint256 indexed proposalId, string description, uint256 startTime, uint256 endTime);
+    event Voted(uint256 indexed proposalId, address indexed voter, bool vote, uint256 weight);
+    event WithdrawWalletChanged(address indexed oldWallet, address indexed newWallet);
+    event CreatorWalletChanged(address indexed oldWallet, address indexed newWallet);
+    event PriceUpdated(uint256 indexed tokenId, uint256 oldPrice, uint256 newPrice);
+    event LimitToken100ActiveChanged(bool newStatus);
+    event WhitelistStatusChanged(bool status);
 
     constructor(
         string memory _baseURI,
         address _ownerAddress,
-        address _creatorWalletAddress,
-        uint256 _initialEurToWei
+        address _creatorWalletAddress
     )
-        ERC1155(_baseURI)             // Passa baseURI al contratto ERC1155
-        Ownable(_ownerAddress)        // Passa il proprietario al contratto Ownable
+        ERC1155(_baseURI)
+        Ownable(_ownerAddress)
     {
-        require(_ownerAddress != address(0), "Invalid owner");
-        require(_creatorWalletAddress != address(0), "Invalid creator");
+        require(bytes(_baseURI).length > 0, "Base URI cannot be empty");
+        require(_ownerAddress != address(0), "Owner address cannot be zero");
+        require(_creatorWalletAddress != address(0), "Creator wallet address cannot be zero");
 
-        baseURI = "ipfs://bafybeia25bydviudkbbiqaj5ea3kisfb3tepzmobtkuq4bw5qjv52cmaxu/";
+        withdrawWallet = _ownerAddress;
         creatorWallet = _creatorWalletAddress;
-        eurToWei = _initialEurToWei;
+        baseURI = _baseURI;
+        creatorSharePercentage = 6;
+        nextProposalId = 0;
+        limitToken100Active = false;
 
         for (uint256 i = 5; i <= 100; i += 5) {
+            pricesInWei[i] = i * 4 * 10**16;
             maxSupply[i] = 2000;
             isValidTokenId[i] = true;
         }
+
+        // Inizializza i tokenCIDs e encryptedURIs qui...
+
+        // Royalties default (5%)
+        _setDefaultRoyalty(_creatorWalletAddress, 500);
     }
 
-    function setConversionRate(uint256 newEurToWei) external onlyOwner {
-        require(newEurToWei > 0, "Rate must be positive");
-        eurToWei = newEurToWei;
-        emit ConversionRateUpdated(newEurToWei);
+    // ----------- Whitelist controls -----------
+    function setWhitelist(address[] calldata addresses, bool status) external onlyOwner {
+        for (uint256 i = 0; i < addresses.length; ++i) {
+            whitelist[addresses[i]] = status;
+        }
+    }
+    function setWhitelistActive(bool status) external onlyOwner {
+        whitelistActive = status;
+        emit WhitelistStatusChanged(status);
     }
 
-    function setCreatorSharePercentage(uint256 newPercentage) external onlyOwner {
-    require(newPercentage <= 100, "Cannot exceed 100%");
-    creatorSharePercentage = newPercentage;
+    // ----------- Pausable controls -----------
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
+
+    // ----------- Limitazione futura mint 100 -----------
+    function setLimitToken100Active(bool active) external onlyOwner {
+        limitToken100Active = active;
+        emit LimitToken100ActiveChanged(active);
+    }
+    function _checkMintLimitToken100(address user, uint256 quantity) internal {
+        if (!limitToken100Active) return;
+        uint256 nowTime = block.timestamp;
+        if (nowTime - lastMintTimeToken100[user] > 1 days) {
+            mintedToken100Last24h[user] = 0;
+            lastMintTimeToken100[user] = nowTime;
+        }
+        require(mintedToken100Last24h[user] + quantity <= 100, "Mint limit for token 100 exceeded in 24h");
+        mintedToken100Last24h[user] += quantity;
     }
 
-    function setBaseURI(string calldata newBaseURI) external onlyOwner {
-        require(bytes(newBaseURI).length > 0, "Base URI required");
+    // ----------- Mint (singolo) -----------
+    function mintNFT(uint256 tokenId, uint256 quantity) external payable whenNotPaused nonReentrant {
+        if (whitelistActive) {
+            require(whitelist[msg.sender], "Not whitelisted for mint");
+        }
+        require(isValidTokenId[tokenId], "The provided tokenId is not supported");
+        require(totalMinted[tokenId] + quantity <= maxSupply[tokenId], "Minting exceeds maximum supply");
+        require(quantity > 0, "Mint quantity must be greater than zero");
+        if (tokenId == 100) {
+            _checkMintLimitToken100(msg.sender, quantity);
+        }
+
+        uint256 totalCostInWei = pricesInWei[tokenId] * quantity;
+        require(msg.value == totalCostInWei, "Incorrect ETH amount sent for minting");
+
+        uint256 creatorShare = (totalCostInWei * creatorSharePercentage) / 100;
+        if (creatorShare > 0) {
+            (bool successCreator, ) = creatorWallet.call{value: creatorShare}("");
+            require(successCreator, "Failed to transfer creator share");
+            emit CreatorShareTransferred(creatorWallet, creatorShare);
+        }
+
+        totalMinted[tokenId] += quantity;
+        _mint(msg.sender, tokenId, quantity, "");
+        emit NFTMinted(msg.sender, tokenId, quantity, pricesInWei[tokenId], encryptedURIs[tokenId]);
+    }
+
+    // ----------- Batch Mint -----------
+    function mintBatchNFT(uint256[] calldata tokenIds, uint256[] calldata quantities) external payable whenNotPaused nonReentrant {
+        if (whitelistActive) {
+            require(whitelist[msg.sender], "Not whitelisted for mint");
+        }
+        require(tokenIds.length == quantities.length, "Arrays length mismatch");
+        uint256 totalCost = 0;
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+            uint256 tokenId = tokenIds[i];
+            uint256 quantity = quantities[i];
+            require(isValidTokenId[tokenId], "Invalid tokenId");
+            require(quantity > 0, "Quantity must be > 0");
+            require(totalMinted[tokenId] + quantity <= maxSupply[tokenId], "Exceeds max supply");
+            if (tokenId == 100) {
+                _checkMintLimitToken100(msg.sender, quantity);
+            }
+            totalCost += pricesInWei[tokenId] * quantity;
+        }
+        require(msg.value == totalCost, "Incorrect ETH amount sent for batch minting");
+
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+            totalMinted[tokenIds[i]] += quantities[i];
+        }
+        _mintBatch(msg.sender, tokenIds, quantities, "");
+
+        uint256 creatorShare = (totalCost * creatorSharePercentage) / 100;
+        if (creatorShare > 0) {
+            (bool successCreator, ) = creatorWallet.call{value: creatorShare}("");
+            require(successCreator, "Failed to transfer creator share");
+            emit CreatorShareTransferred(creatorWallet, creatorShare);
+        }
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+            emit NFTMinted(msg.sender, tokenIds[i], quantities[i], pricesInWei[tokenIds[i]], encryptedURIs[tokenIds[i]]);
+        }
+    }
+
+    // ----------- Burn -----------
+    function burn(address account, uint256 tokenId, uint256 quantity) external whenNotPaused {
+        require(
+            account == msg.sender || isApprovedForAll(account, msg.sender),
+            "Caller is not owner nor approved"
+        );
+        _burn(account, tokenId, quantity);
+        emit NFTBurned(account, tokenId, quantity);
+    }
+
+    // ----------- Withdraw -----------
+    function withdraw() external onlyOwner nonReentrant {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "Nothing to withdraw");
+        (bool sent, ) = payable(withdrawWallet).call{value: balance}("");
+        require(sent, "Withdraw failed");
+        emit FundsWithdrawn(withdrawWallet, balance);
+    }
+
+    // ----------- Governance: Proposal & voto quadratico con snapshot ----------
+    function createProposal(
+        string calldata description,
+        uint256 startTime,
+        uint256 endTime
+    ) external onlyOwner {
+        require(startTime < endTime, "Start must be before end");
+        Proposal storage prop = proposals[nextProposalId];
+        prop.description = description;
+        prop.startTime = startTime;
+        prop.endTime = endTime;
+        prop.active = true;
+        emit ProposalCreated(nextProposalId, description, startTime, endTime);
+        nextProposalId++;
+    }
+
+    function voteOnProposal(uint256 proposalId, bool support) external whenNotPaused {
+        require(proposalId < nextProposalId, "Invalid proposal");
+        Proposal storage prop = proposals[proposalId];
+        require(prop.active, "Proposal not active");
+        require(block.timestamp >= prop.startTime && block.timestamp <= prop.endTime, "Voting not allowed at this time");
+        require(!hasVoted[proposalId][msg.sender], "Already voted");
+
+        // Snapshot all'atto del primo voto
+        if (prop.balancesSnapshot[msg.sender] == 0) {
+            uint256 balance = 0;
+            for (uint256 i = 5; i <= 100; i += 5) {
+                balance += balanceOf(msg.sender, i);
+            }
+            require(balance > 0, "Must own at least one NFT to vote");
+            prop.balancesSnapshot[msg.sender] = balance;
+        }
+        uint256 voteWeight = sqrt(prop.balancesSnapshot[msg.sender]);
+
+        hasVoted[proposalId][msg.sender] = true;
+        if (support) {
+            prop.yesVotes += voteWeight;
+        } else {
+            prop.noVotes += voteWeight;
+        }
+        emit Voted(proposalId, msg.sender, support, voteWeight);
+    }
+
+    function sqrt(uint256 x) internal pure returns (uint256 y) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+
+    // ----------- Aggiorna Prezzi e Wallet con eventi -----------
+    function updatePrice(uint256 tokenId, uint256 newPrice) external onlyOwner {
+        require(isValidTokenId[tokenId], "Invalid tokenId");
+        uint256 oldPrice = pricesInWei[tokenId];
+        pricesInWei[tokenId] = newPrice;
+        emit PriceUpdated(tokenId, oldPrice, newPrice);
+    }
+    function updateWithdrawWallet(address newWallet) external onlyOwner {
+        require(newWallet != address(0), "Invalid wallet");
+        address old = withdrawWallet;
+        withdrawWallet = newWallet;
+        emit WithdrawWalletChanged(old, newWallet);
+    }
+    function updateCreatorWallet(address newWallet) external onlyOwner {
+        require(newWallet != address(0), "Invalid wallet");
+        address old = creatorWallet;
+        creatorWallet = newWallet;
+        emit CreatorWalletChanged(old, newWallet);
+        _setDefaultRoyalty(newWallet, royaltyInfo(0).royaltyFraction);
+    }
+
+    // ----------- Royalties ERC2981 -----------
+    function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
+        _setDefaultRoyalty(receiver, feeNumerator);
+    }
+
+    // ----------- ERC1155 URI -----------
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        require(isValidTokenId[tokenId], "The provided tokenId is not supported");
+        return string(abi.encodePacked(baseURI, Strings.toString(tokenId), ".json"));
+    }
+
+    // ----------- ERC165 Support -----------
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC1155, ERC2981)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // ----------- Funzioni Owner per aggiornare baseURI, tokenCIDs ed encryptedURIs -----------
+
+    function setBaseURI(string memory newBaseURI) external onlyOwner {
         baseURI = newBaseURI;
         emit BaseURIUpdated(newBaseURI);
     }
 
-    function setTokenCID(uint256 tokenId, string calldata cid) external onlyOwner {
-        require(isValidTokenId[tokenId], "Invalid token ID");
-        tokenCIDs[tokenId] = cid;
+    function setTokenCID(uint256 tokenId, string memory newCID) external onlyOwner {
+        require(isValidTokenId[tokenId], "TokenId non valido");
+        tokenCIDs[tokenId] = newCID;
+        emit TokenCIDUpdated(tokenId, newCID);
     }
 
-    function setEncryptedURI(uint256 tokenId, string calldata encrypted) external onlyOwner {
-        require(isValidTokenId[tokenId], "Invalid token ID");
-        encryptedURIs[tokenId] = encrypted;
-    }
-
-    function calculatePriceInWei(uint256 tokenId) public view returns (uint256) {
-        require(isValidTokenId[tokenId], "Invalid token ID");
-        uint256 eurValue = (tokenId * 2) / 100; // NFT 100 = 2 EUR
-        return eurValue * eurToWei;
-    }
-
-    function getAllPricesInWei() external view returns (uint256[] memory tokenIds, uint256[] memory prices) {
-        uint256 count = 20; // from 5 to 100 every 5
-        tokenIds = new uint256[](count);
-        prices = new uint256[](count);
-
-        uint256 index = 0;
-        for (uint256 i = 5; i <= 100; i += 5) {
-            tokenIds[index] = i;
-            prices[index] = calculatePriceInWei(i);
-            index++;
+    function setTokenCIDs(uint256[] calldata tokenIds, string[] calldata newCIDs) external onlyOwner {
+        require(tokenIds.length == newCIDs.length, "Array length mismatch");
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+            require(isValidTokenId[tokenIds[i]], "TokenId non valido");
+            tokenCIDs[tokenIds[i]] = newCIDs[i];
         }
+        emit TokenCIDsUpdated(tokenIds, newCIDs);
     }
 
-    function mintNFT(uint256 tokenId, uint256 quantity) external payable {
-        require(isValidTokenId[tokenId], "Invalid token ID");
-        require(quantity > 0, "Must mint at least 1");
-        require(totalMinted[tokenId] + quantity <= maxSupply[tokenId], "Exceeds max supply");
+    function setEncryptedURI(uint256 tokenId, string memory newEncryptedURI) external onlyOwner {
+        require(isValidTokenId[tokenId], "TokenId non valido");
+        encryptedURIs[tokenId] = newEncryptedURI;
+        emit EncryptedURIUpdated(tokenId, newEncryptedURI);
+    }
 
-        uint256 unitPrice = calculatePriceInWei(tokenId);
-        uint256 totalCost = unitPrice * quantity;
-        require(msg.value == totalCost, "Incorrect ETH/MATIC sent");
-
-        totalMinted[tokenId] += quantity;
-        _mint(msg.sender, tokenId, quantity, "");
-
-        uint256 creatorShare = (totalCost * creatorSharePercentage) / 100;
-        if (creatorShare > 0) {
-            (bool success, ) = creatorWallet.call{value: creatorShare}("");
-            require(success, "Creator transfer failed");
-            emit CreatorShareTransferred(creatorWallet, creatorShare);
+    function setEncryptedURIs(uint256[] calldata tokenIds, string[] calldata newEncryptedURIs) external onlyOwner {
+        require(tokenIds.length == newEncryptedURIs.length, "Array length mismatch");
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+            require(isValidTokenId[tokenIds[i]], "TokenId non valido");
+            encryptedURIs[tokenIds[i]] = newEncryptedURIs[i];
         }
-
-        emit NFTMinted(msg.sender, tokenId, quantity, unitPrice, encryptedURIs[tokenId]);
-    }
-
-    function uri(uint256 tokenId) public view override returns (string memory) {
-        require(isValidTokenId[tokenId], "Invalid token ID");
-        return string(abi.encodePacked(baseURI, tokenId.toString(), ".json"));
-    }
-
-    function withdraw() external onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "Nothing to withdraw");
-        (bool sent, ) = payable(owner()).call{value: balance}("");
-        require(sent, "Withdraw failed");
+        emit EncryptedURIsUpdated(tokenIds, newEncryptedURIs);
     }
 }
