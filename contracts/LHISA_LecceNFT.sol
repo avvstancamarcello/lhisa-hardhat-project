@@ -1,11 +1,66 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+// --- Libreria espansa: ReentrancyGuard ---
+abstract contract ReentrancyGuard {
+    uint256 private constant NOT_ENTERED = 1;
+    uint256 private constant ENTERED = 2;
+
+    uint256 private _status;
+
+    error ReentrancyGuardReentrantCall();
+
+    constructor() {
+        _status = NOT_ENTERED;
+    }
+
+    modifier nonReentrant() {
+        if (_status == ENTERED) revert ReentrancyGuardReentrantCall();
+        _status = ENTERED;
+        _;
+        _status = NOT_ENTERED;
+    }
+}
+
+// --- Libreria espansa: Pausable ---
+abstract contract Pausable is Ownable {
+    event Paused(address account);
+    event Unpaused(address account);
+
+    bool private _paused;
+
+    constructor() {
+        _paused = false;
+    }
+
+    function paused() public view returns (bool) {
+        return _paused;
+    }
+
+    modifier whenNotPaused() {
+        require(!_paused, "Pausable: paused");
+        _;
+    }
+
+    modifier whenPaused() {
+        require(_paused, "Pausable: not paused");
+        _;
+    }
+
+    function _pause() internal whenNotPaused {
+        _paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function _unpause() internal whenPaused {
+        _paused = false;
+        emit Unpaused(msg.sender);
+    }
+}
+
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol";
-import "@openzeppelin/contracts/token/common/ERC2981.sol"; // Per Royalties EIP-2981
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard, ERC2981 {
@@ -14,27 +69,24 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
 
     mapping(uint256 => uint256) public maxSupply;
     mapping(uint256 => uint256) public totalMinted;
-    mapping(uint256 => uint256) public pricesInWei; // Prezzi dei token in Wei
-    mapping(uint256 => bool) public isValidTokenId; // Per controllare i tokenId validi
-    mapping(uint256 => string) public encryptedURIs; // Mappa tokenId agli URI crittografati (per dati sensibili/backend)
-    mapping(uint256 => string) public tokenCIDs; // Mappa tokenId ai CIDs (per metadati pubblici, visibili ai wallet)
+    mapping(uint256 => uint256) public pricesInWei;
+    mapping(uint256 => bool) public isValidTokenId;
+    mapping(uint256 => string) public encryptedURIs;
+    mapping(uint256 => string) public tokenCIDs;
 
-    address public withdrawWallet; // Wallet principale per i prelievi (es. per il crowdfounding)
-    address public creatorWallet; // Indirizzo del wallet del creator
-    uint256 public creatorSharePercentage; // Percentuale riservata al creator (es. 6 per 6%)
-
-    string public baseURI; // Base URI per la costruzione dei metadati pubblici
-
-    // --- Whitelist ---
+    address public withdrawWallet;
+    address public creatorWallet;
+    uint256 public creatorSharePercentage;
+    uint96 public defaultRoyaltyFeeNumerator;
+    string public baseURI;
+    
     bool public whitelistActive = false;
-    mapping(address => bool) public whitelist; // Indirizzi whitelisted
+    mapping(address => bool) public whitelist;
 
-    // --- Limitazione mint tokenID 100 (per prevenire spam su token rari) ---
     bool public limitToken100Active;
-    mapping(address => uint256) public lastMintTimeToken100; // Ultimo mint del token 100 per utente
-    mapping(address => uint256) public mintedToken100Last24h; // Quantità mintata di token 100 nelle ultime 24h
+    mapping(address => uint256) public lastMintTimeToken100;
+    mapping(address => uint256) public mintedToken100Last24h;
 
-    // --- Governance ---
     struct Proposal {
         string description;
         uint256 startTime;
@@ -42,27 +94,23 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         uint256 yesVotes;
         uint256 noVotes;
         bool active;
-        // La `balancesSnapshot` permette di 'congelare' il saldo NFT di un votante al momento del voto.
-        // In un contratto reale per votazioni su larga scala, si userebbe un pattern più sofisticato (es. OpenZeppelin Governor).
-        // Per questa implementazione, lo snapshot viene preso al momento del primo voto di un utente sulla proposta.
-        mapping(address => uint256) balancesSnapshot; // Snapshot del saldo per voto quadratico
+        bool allowNewMintsToVote;
+        mapping(address => uint256) balancesSnapshot;
     }
     mapping(uint256 => Proposal) public proposals;
-    mapping(uint256 => mapping(address => bool)) public hasVoted; // proposalId => voterAddress => true/false
-    uint256 public nextProposalId; // ID per la prossima proposta
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    uint256 public nextProposalId;
 
-    // --- Burn Request ---
     struct BurnRequest {
         address requester;
         uint256 tokenId;
         uint256 quantity;
-        bool approved; // Se la richiesta è stata approvata dall'owner
+        bool approved;
     }
-    BurnRequest[] public burnRequests; // Array di richieste di burn
+    BurnRequest[] public burnRequests;
 
-    uint256 public constant MINIMUM_TOTAL_VALUE = 84000; // Valore minimo totale (in Wei) della collezione dopo il burn, per prevenire burn eccessivi.
+    uint256 public constant MINIMUM_TOTAL_VALUE = 84000;
 
-    // ----------- Eventi -----------
     event NFTMinted(address indexed buyer, uint256 tokenId, uint256 quantity, uint256 price, string encryptedURI);
     event FundsWithdrawn(address indexed owner, uint256 amount);
     event BaseURIUpdated(string newBaseURI);
@@ -76,7 +124,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
     event BurnDenied(uint256 requestId, address indexed requester, uint256 tokenId, uint256 quantity);
     event CreatorShareTransferred(address indexed receiver, uint256 amount);
     event ProposalCreated(uint256 indexed proposalId, string description, uint256 startTime, uint256 endTime);
-    event Voted(uint256 indexed proposalId, address indexed voter, bool vote, uint256 weight); // Aggiunto weight per voto quadratico
+    event Voted(uint256 indexed proposalId, address indexed voter, bool vote, uint256 weight);
     event WithdrawWalletChanged(address indexed oldWallet, address indexed newWallet);
     event CreatorWalletChanged(address indexed oldWallet, address indexed newWallet);
     event PriceUpdated(uint256 indexed tokenId, uint256 oldPrice, uint256 newPrice);
@@ -88,30 +136,25 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         address _ownerAddress,
         address _creatorWalletAddress
     )
-        ERC1155(_baseURI) // Passa baseURI al costruttore ERC1155
-        Ownable(_ownerAddress) // Passa il proprietario al costruttore Ownable
+        ERC1155(_baseURI)
+        Ownable(_ownerAddress)
     {
         require(bytes(_baseURI).length > 0, "Base URI cannot be empty");
         require(_ownerAddress != address(0), "Owner address cannot be zero");
         require(_creatorWalletAddress != address(0), "Creator wallet address cannot be zero");
 
-        withdrawWallet = _ownerAddress; // Il wallet di prelievo predefinito è l'owner
-        creatorWallet = _creatorWalletAddress; // Il wallet del creator
-        baseURI = _baseURI; // Imposta la base URI iniziale
-        creatorSharePercentage = 6; // Percentuale di royalty predefinita
-        nextProposalId = 0; // Inizializza il contatore delle proposte
-        limitToken100Active = false; // La limitazione per token 100 è inizialmente disattiva
+        withdrawWallet = _ownerAddress;
+        creatorWallet = _creatorWalletAddress;
+        baseURI = _baseURI;
+        creatorSharePercentage = 6;
+        nextProposalId = 0;
+        limitToken100Active = false;
 
-        // --- Definizione dei prezzi, maxSupply e tokenId validi per i 20 token (da 5 a 100 ogni 5) ---
-        // Prezzo per TokenID 'i' è i * 4 * 10^16 Wei (0.04 MATIC per TokenID)
         for (uint256 i = 5; i <= 100; i += 5) {
             pricesInWei[i] = i * 4 * 10**16;
-            maxSupply[i] = 2000; // Supply massima per ogni token
+            maxSupply[i] = 2000;
             isValidTokenId[i] = true;
         }
-
-        // --- Inizializzazione COMPLETA di tokenCIDs e encryptedURIs per i 20 token (pubblici e crittografati) ---
-        // Vengono usati gli stessi CID per encryptedURIs e tokenCIDs, come da tua conferma. L'ordine è dal più grande al più piccolo per comodità.
         tokenCIDs[100] = "bafybeibzvith6ji34mzhb7mgdtascuhvczxvg3yyt73prlzg7n4t56qhhe";
         encryptedURIs[100] = "bafybeibzvith6ji34mzhb7mgdtascuhvczxvg3yyt73prlzg7n4t56qhhe";
         tokenCIDs[95] = "bafybeiarkwmmlxudlutqyw6jhrln3kkq7uzhendqnmhrtvtsu5gyrz62hm";
@@ -153,11 +196,11 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         tokenCIDs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
         encryptedURIs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
 
-        // Royalties default (5%)
         _setDefaultRoyalty(_creatorWalletAddress, 500);
+        defaultRoyaltyFeeNumerator = 500;
     }
 
-    // ----------- Whitelist controls -----------
+    // --- Whitelist controls ---
     function setWhitelist(address[] calldata addresses, bool status) external onlyOwner {
         for (uint256 i = 0; i < addresses.length; ++i) {
             whitelist[addresses[i]] = status;
@@ -168,27 +211,27 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit WhitelistStatusChanged(status);
     }
 
-    // ----------- Pausable controls -----------
+    // --- Pausable controls ---
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
-    // ----------- Limitazione futura mint 100 -----------
+    // --- Limitazione futura mint 100 ---
     function setLimitToken100Active(bool active) external onlyOwner {
         limitToken100Active = active;
         emit LimitToken100ActiveChanged(active);
     }
-    function _checkMintLimitToken100(address user, uint256 quantity) internal view returns (bool) {
-        if (!limitToken100Active) return true; // Se la limitazione non è attiva, permette sempre il mint
+    function _checkMintLimitToken100(address user, uint256 quantity) internal {
+        if (!limitToken100Active) return;
         uint256 nowTime = block.timestamp;
         if (nowTime - lastMintTimeToken100[user] > 1 days) {
             mintedToken100Last24h[user] = 0;
             lastMintTimeToken100[user] = nowTime;
         }
         require(mintedToken100Last24h[user] + quantity <= 100, "Mint limit for token 100 exceeded in 24h");
-        return true;
+        mintedToken100Last24h[user] += quantity;
     }
 
-    // ----------- Mint (singolo) -----------
+    // --- Mint (singolo) ---
     function mintNFT(uint256 tokenId, uint256 quantity) external payable whenNotPaused nonReentrant {
         if (whitelistActive) {
             require(whitelist[msg.sender], "Not whitelisted for mint");
@@ -215,7 +258,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit NFTMinted(msg.sender, tokenId, quantity, pricesInWei[tokenId], encryptedURIs[tokenId]);
     }
 
-    // ----------- Batch Mint -----------
+    // --- Batch Mint ---
     function mintBatchNFT(uint256[] calldata tokenIds, uint256[] calldata quantities) external payable whenNotPaused nonReentrant {
         if (whitelistActive) {
             require(whitelist[msg.sender], "Not whitelisted for mint");
@@ -251,17 +294,18 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         }
     }
 
-    // ----------- Burn -----------
+    // --- Burn ---
     function burn(address account, uint256 tokenId, uint256 quantity) external whenNotPaused {
         require(
             account == msg.sender || isApprovedForAll(account, msg.sender),
             "Caller is not owner nor approved"
         );
         _burn(account, tokenId, quantity);
+        totalMinted[tokenId] -= quantity;
         emit NFTBurned(account, tokenId, quantity);
     }
 
-    // ----------- Withdraw -----------
+    // --- Withdraw ---
     function withdraw() external onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
         require(balance > 0, "Nothing to withdraw");
@@ -269,21 +313,21 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         require(sent, "Withdraw failed");
         emit FundsWithdrawn(withdrawWallet, balance);
     }
-
-    // ----------- Governance: Proposal & voto quadratico con snapshot ----------
+    
+        // --- Governance: Proposal & voto quadratico con snapshot ---
     function createProposal(
         string calldata description,
         uint256 startTime,
         uint256 endTime,
-        bool allowNewMintsToVote // Added this param to constructor
+        bool allowNewMintsToVote
     ) external onlyOwner {
         require(startTime < endTime, "Start must be before end");
         Proposal storage prop = proposals[nextProposalId];
         prop.description = description;
         prop.startTime = startTime;
         prop.endTime = endTime;
-        prop.yesVotes = 0; // Inizializza i voti Yes
-        prop.noVotes = 0; // Inizializza i voti No
+        prop.yesVotes = 0;
+        prop.noVotes = 0;
         prop.active = true;
         prop.allowNewMintsToVote = allowNewMintsToVote;
         emit ProposalCreated(nextProposalId, description, startTime, endTime);
@@ -297,7 +341,6 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         require(block.timestamp >= prop.startTime && block.timestamp <= prop.endTime, "Voting not allowed at this time");
         require(!hasVoted[proposalId][msg.sender], "Already voted");
 
-        // Snapshot all'atto del primo voto (se non già fatto)
         if (prop.balancesSnapshot[msg.sender] == 0) {
             uint256 balance = 0;
             for (uint256 i = 5; i <= 100; i += 5) {
@@ -321,8 +364,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         Proposal storage proposal = proposals[proposalId];
         require(proposal.active, "Proposal not active");
         require(block.timestamp > proposal.endTime, "Voting period has not ended yet");
-        proposal.active = false; // Disattiva la proposta
-        // A questo punto, potresti aggiungere una logica per eseguire un'azione basata sull'esito del voto.
+        proposal.active = false;
     }
 
     function getProposalResults(uint256 proposalId) public view returns (string memory description, uint256 yesVotes, uint256 noVotes, bool active, uint256 startTime, uint256 endTime) {
@@ -330,11 +372,11 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         return (proposal.description, proposal.yesVotes, proposal.noVotes, proposal.active, proposal.startTime, proposal.endTime);
     }
 
-    // ----------- Burn Request -----------
+    // --- Burn Request ---
     function requestBurn(uint256 tokenId, uint256 quantity) external {
         require(isValidTokenId[tokenId], "Invalid tokenId");
         require(balanceOf(msg.sender, tokenId) >= quantity, "Insufficient balance");
-        
+
         burnRequests.push(BurnRequest({
             requester: msg.sender,
             tokenId: tokenId,
@@ -364,17 +406,15 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
 
     function calculateTotalValueAfterBurn(uint256 tokenId, uint256 quantity) public view returns (uint256) {
         uint256 totalValue = 0;
-        uint256[] memory mintedTokens = new uint256[](20); // 20 token validi da 5 a 100 ogni 5
+        uint256[] memory mintedTokens = new uint256[](20);
         uint256 idx = 0;
         for (uint256 i = 5; i <= 100; i += 5) {
             mintedTokens[idx] = totalMinted[i];
             idx++;
         }
-        
-        // Sottrai la quantità che si vuole bruciare dal token specifico nella copia locale
-        uint256 tokenArrayIndex = (tokenId / 5) - 1; // Calcola l'indice nell'array (es. tokenId 5 -> index 0)
+        uint256 tokenArrayIndex = (tokenId / 5) - 1;
         require(tokenArrayIndex < 20, "Token ID not in burn calculation range");
-        mintedTokens[tokenArrayIndex] -= quantity; 
+        mintedTokens[tokenArrayIndex] -= quantity;
 
         idx = 0;
         for (uint256 i = 5; i <= 100; i += 5) {
@@ -384,7 +424,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         return totalValue;
     }
 
-    // ----------- Utility Functions (private/internal) -----------
+    // --- Utility Functions ---
     function sqrt(uint256 x) internal pure returns (uint256 y) {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2;
@@ -393,10 +433,10 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
             y = z;
             z = (x / z + z) / 2;
         }
-        return y; // Approssimazione verso il basso
+        return y;
     }
 
-    // ----------- Aggiorna Prezzi e Wallet con eventi -----------
+    // --- Aggiorna Prezzi e Wallet con eventi ---
     function updatePrice(uint256 tokenId, uint256 newPrice) external onlyOwner {
         require(isValidTokenId[tokenId], "Invalid tokenId");
         uint256 oldPrice = pricesInWei[tokenId];
@@ -409,26 +449,28 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         withdrawWallet = newWallet;
         emit WithdrawWalletChanged(old, newWallet);
     }
+
     function updateCreatorWallet(address newWallet) external onlyOwner {
         require(newWallet != address(0), "Invalid wallet");
         address old = creatorWallet;
         creatorWallet = newWallet;
         emit CreatorWalletChanged(old, newWallet);
-        _setDefaultRoyalty(newWallet, royaltyInfo(0).royaltyFraction); // Aggiorna royalty default con nuovo creator
+        _setDefaultRoyalty(newWallet, defaultRoyaltyFeeNumerator);
     }
-
-    // ----------- Royalties ERC2981 -----------
+    
+        // --- Royalties ERC2981 ---
     function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
-        _setDefaultRoyalty(receiver, feeNumerator);
-    }
+    _setDefaultRoyalty(receiver, feeNumerator);
+    defaultRoyaltyFeeNumerator = feeNumerator;
+    }    
+   }
 
-    // ----------- ERC1155 URI -----------
+    // --- ERC1155 URI ---
     function uri(uint256 tokenId) public view override returns (string memory) {
         require(isValidTokenId[tokenId], "The provided tokenId is not supported");
         return string(abi.encodePacked(baseURI, Strings.toString(tokenId), ".json"));
     }
 
-    // ----------- ERC165 Support -----------
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -439,7 +481,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         return super.supportsInterface(interfaceId);
     }
 
-    // ----------- Funzioni Owner per aggiornare baseURI, tokenCIDs ed encryptedURIs -----------
+    // --- Funzioni Owner per aggiornare baseURI, tokenCIDs ed encryptedURIs ---
     function setBaseURI(string memory newBaseURI) external onlyOwner {
         baseURI = newBaseURI;
         emit BaseURIUpdated(newBaseURI);
@@ -475,13 +517,37 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit EncryptedURIsUpdated(tokenIds, newEncryptedURIs);
     }
 
-    // ----------- Funzioni di lettura pubblica per trasparenza -----------
+    // --- Funzioni di lettura pubblica per trasparenza ---
     function getTokenCID(uint256 tokenId) public view returns (string memory) {
         return tokenCIDs[tokenId];
     }
-
     function getEncryptedURI(uint256 tokenId) public view returns (string memory) {
         return encryptedURIs[tokenId];
     }
+    function getAllTokenCIDs() public view returns (string[] memory) {
+        string[] memory cids = new string[](20);
+        uint256 idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            cids[idx] = tokenCIDs[i];
+            idx++;
+        }
+        return cids;
+    }
+    function getAllEncryptedURIs() public view returns (string[] memory) {
+        string[] memory uris = new string[](20);
+        uint256 idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            uris[idx] = encryptedURIs[i];
+            idx++;
+        }
+        return uris;
+    }
+    
+    receive() external payable {
+        revert("Direct ETH transfers not allowed");
+    }
+    
+    fallback() external payable {
+        revert("Fallback not allowed");
+    }
 }
-```
