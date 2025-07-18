@@ -17,7 +17,7 @@ node_modules/
 *.test.js
 *.test.cjs
 *.test-dbg.sol
-
+*.backup*
 # Remix files (if any)
 .editorconfig
 

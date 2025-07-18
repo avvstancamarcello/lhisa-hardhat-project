@@ -1,10 +1,14 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+[dotenv@17.2.0] injecting env (18) from .env (tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit)
+// Sources flattened with hardhat v2.26.0 https://hardhat.org
 
-// File @openzeppelin/contracts/utils/Context.sol@v5.3.0
+// SPDX-License-Identifier: MIT
+
+// File @openzeppelin/contracts/utils/Context.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.0.1) (utils/Context.sol)
+
+pragma solidity ^0.8.20;
 
 /**
  * @dev Provides information about the current execution context, including the
@@ -31,11 +35,12 @@ abstract contract Context {
 }
 
 
-// File @openzeppelin/contracts/access/Ownable.sol@v5.3.0
+// File @openzeppelin/contracts/access/Ownable.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.0.0) (access/Ownable.sol)
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Contract module which provides a basic access control mechanism, where
@@ -132,10 +137,236 @@ abstract contract Ownable is Context {
 }
 
 
-// File @openzeppelin/contracts/interfaces/draft-IERC6093.sol@v5.3.0
+// File @openzeppelin/contracts/utils/introspection/IERC165.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (interfaces/draft-IERC6093.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (utils/introspection/IERC165.sol)
+
+pragma solidity >=0.4.16;
+
+/**
+ * @dev Interface of the ERC-165 standard, as defined in the
+ * https://eips.ethereum.org/EIPS/eip-165[ERC].
+ *
+ * Implementers can declare support of contract interfaces, which can then be
+ * queried by others ({ERC165Checker}).
+ *
+ * For an implementation, see {ERC165}.
+ */
+interface IERC165 {
+    /**
+     * @dev Returns true if this contract implements the interface defined by
+     * `interfaceId`. See the corresponding
+     * https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified[ERC section]
+     * to learn more about how these ids are created.
+     *
+     * This function call must use less than 30 000 gas.
+     */
+    function supportsInterface(bytes4 interfaceId) external view returns (bool);
+}
+
+
+// File @openzeppelin/contracts/interfaces/IERC2981.sol@v5.4.0
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.4.0) (interfaces/IERC2981.sol)
+
+pragma solidity >=0.6.2;
+
+/**
+ * @dev Interface for the NFT Royalty Standard.
+ *
+ * A standardized way to retrieve royalty payment information for non-fungible tokens (NFTs) to enable universal
+ * support for royalty payments across all NFT marketplaces and ecosystem participants.
+ */
+interface IERC2981 is IERC165 {
+    /**
+     * @dev Returns how much royalty is owed and to whom, based on a sale price that may be denominated in any unit of
+     * exchange. The royalty amount is denominated and should be paid in that same unit of exchange.
+     *
+     * NOTE: ERC-2981 allows setting the royalty to 100% of the price. In that case all the price would be sent to the
+     * royalty receiver and 0 tokens to the seller. Contracts dealing with royalty should consider empty transfers.
+     */
+    function royaltyInfo(
+        uint256 tokenId,
+        uint256 salePrice
+    ) external view returns (address receiver, uint256 royaltyAmount);
+}
+
+
+// File @openzeppelin/contracts/utils/introspection/ERC165.sol@v5.4.0
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.4.0) (utils/introspection/ERC165.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Implementation of the {IERC165} interface.
+ *
+ * Contracts that want to implement ERC-165 should inherit from this contract and override {supportsInterface} to check
+ * for the additional interface id that will be supported. For example:
+ *
+ * ```solidity
+ * function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+ *     return interfaceId == type(MyInterface).interfaceId || super.supportsInterface(interfaceId);
+ * }
+ * ```
+ */
+abstract contract ERC165 is IERC165 {
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
+        return interfaceId == type(IERC165).interfaceId;
+    }
+}
+
+
+// File @openzeppelin/contracts/token/common/ERC2981.sol@v5.4.0
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.4.0) (token/common/ERC2981.sol)
+
+pragma solidity ^0.8.20;
+
+
+/**
+ * @dev Implementation of the NFT Royalty Standard, a standardized way to retrieve royalty payment information.
+ *
+ * Royalty information can be specified globally for all token ids via {_setDefaultRoyalty}, and/or individually for
+ * specific token ids via {_setTokenRoyalty}. The latter takes precedence over the first.
+ *
+ * Royalty is specified as a fraction of sale price. {_feeDenominator} is overridable but defaults to 10000, meaning the
+ * fee is specified in basis points by default.
+ *
+ * IMPORTANT: ERC-2981 only specifies a way to signal royalty information and does not enforce its payment. See
+ * https://eips.ethereum.org/EIPS/eip-2981#optional-royalty-payments[Rationale] in the ERC. Marketplaces are expected to
+ * voluntarily pay royalties together with sales, but note that this standard is not yet widely supported.
+ */
+abstract contract ERC2981 is IERC2981, ERC165 {
+    struct RoyaltyInfo {
+        address receiver;
+        uint96 royaltyFraction;
+    }
+
+    RoyaltyInfo private _defaultRoyaltyInfo;
+    mapping(uint256 tokenId => RoyaltyInfo) private _tokenRoyaltyInfo;
+
+    /**
+     * @dev The default royalty set is invalid (eg. (numerator / denominator) >= 1).
+     */
+    error ERC2981InvalidDefaultRoyalty(uint256 numerator, uint256 denominator);
+
+    /**
+     * @dev The default royalty receiver is invalid.
+     */
+    error ERC2981InvalidDefaultRoyaltyReceiver(address receiver);
+
+    /**
+     * @dev The royalty set for a specific `tokenId` is invalid (eg. (numerator / denominator) >= 1).
+     */
+    error ERC2981InvalidTokenRoyalty(uint256 tokenId, uint256 numerator, uint256 denominator);
+
+    /**
+     * @dev The royalty receiver for `tokenId` is invalid.
+     */
+    error ERC2981InvalidTokenRoyaltyReceiver(uint256 tokenId, address receiver);
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override(IERC165, ERC165) returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    /// @inheritdoc IERC2981
+    function royaltyInfo(
+        uint256 tokenId,
+        uint256 salePrice
+    ) public view virtual returns (address receiver, uint256 amount) {
+        RoyaltyInfo storage _royaltyInfo = _tokenRoyaltyInfo[tokenId];
+        address royaltyReceiver = _royaltyInfo.receiver;
+        uint96 royaltyFraction = _royaltyInfo.royaltyFraction;
+
+        if (royaltyReceiver == address(0)) {
+            royaltyReceiver = _defaultRoyaltyInfo.receiver;
+            royaltyFraction = _defaultRoyaltyInfo.royaltyFraction;
+        }
+
+        uint256 royaltyAmount = (salePrice * royaltyFraction) / _feeDenominator();
+
+        return (royaltyReceiver, royaltyAmount);
+    }
+
+    /**
+     * @dev The denominator with which to interpret the fee set in {_setTokenRoyalty} and {_setDefaultRoyalty} as a
+     * fraction of the sale price. Defaults to 10000 so fees are expressed in basis points, but may be customized by an
+     * override.
+     */
+    function _feeDenominator() internal pure virtual returns (uint96) {
+        return 10000;
+    }
+
+    /**
+     * @dev Sets the royalty information that all ids in this contract will default to.
+     *
+     * Requirements:
+     *
+     * - `receiver` cannot be the zero address.
+     * - `feeNumerator` cannot be greater than the fee denominator.
+     */
+    function _setDefaultRoyalty(address receiver, uint96 feeNumerator) internal virtual {
+        uint256 denominator = _feeDenominator();
+        if (feeNumerator > denominator) {
+            // Royalty fee will exceed the sale price
+            revert ERC2981InvalidDefaultRoyalty(feeNumerator, denominator);
+        }
+        if (receiver == address(0)) {
+            revert ERC2981InvalidDefaultRoyaltyReceiver(address(0));
+        }
+
+        _defaultRoyaltyInfo = RoyaltyInfo(receiver, feeNumerator);
+    }
+
+    /**
+     * @dev Removes default royalty information.
+     */
+    function _deleteDefaultRoyalty() internal virtual {
+        delete _defaultRoyaltyInfo;
+    }
+
+    /**
+     * @dev Sets the royalty information for a specific token id, overriding the global default.
+     *
+     * Requirements:
+     *
+     * - `receiver` cannot be the zero address.
+     * - `feeNumerator` cannot be greater than the fee denominator.
+     */
+    function _setTokenRoyalty(uint256 tokenId, address receiver, uint96 feeNumerator) internal virtual {
+        uint256 denominator = _feeDenominator();
+        if (feeNumerator > denominator) {
+            // Royalty fee will exceed the sale price
+            revert ERC2981InvalidTokenRoyalty(tokenId, feeNumerator, denominator);
+        }
+        if (receiver == address(0)) {
+            revert ERC2981InvalidTokenRoyaltyReceiver(tokenId, address(0));
+        }
+
+        _tokenRoyaltyInfo[tokenId] = RoyaltyInfo(receiver, feeNumerator);
+    }
+
+    /**
+     * @dev Resets royalty information for the token id back to the global default.
+     */
+    function _resetTokenRoyalty(uint256 tokenId) internal virtual {
+        delete _tokenRoyaltyInfo[tokenId];
+    }
+}
+
+
+// File @openzeppelin/contracts/interfaces/draft-IERC6093.sol@v5.4.0
+
+// Original license: SPDX_License_Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.4.0) (interfaces/draft-IERC6093.sol)
+pragma solidity >=0.8.4;
 
 /**
  * @dev Standard ERC-20 Errors
@@ -296,39 +527,12 @@ interface IERC1155Errors {
 }
 
 
-// File @openzeppelin/contracts/utils/introspection/IERC165.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/IERC1155.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (utils/introspection/IERC165.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (token/ERC1155/IERC1155.sol)
 
-
-/**
- * @dev Interface of the ERC-165 standard, as defined in the
- * https://eips.ethereum.org/EIPS/eip-165[ERC].
- *
- * Implementers can declare support of contract interfaces, which can then be
- * queried by others ({ERC165Checker}).
- *
- * For an implementation, see {ERC165}.
- */
-interface IERC165 {
-    /**
-     * @dev Returns true if this contract implements the interface defined by
-     * `interfaceId`. See the corresponding
-     * https://eips.ethereum.org/EIPS/eip-165#how-interfaces-are-identified[ERC section]
-     * to learn more about how these ids are created.
-     *
-     * This function call must use less than 30 000 gas.
-     */
-    function supportsInterface(bytes4 interfaceId) external view returns (bool);
-}
-
-
-// File @openzeppelin/contracts/token/ERC1155/IERC1155.sol@v5.3.0
-
-// Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.3.0) (token/ERC1155/IERC1155.sol)
-
+pragma solidity >=0.6.2;
 
 /**
  * @dev Required interface of an ERC-1155 compliant contract, as defined in the
@@ -448,11 +652,12 @@ interface IERC1155 is IERC165 {
 }
 
 
-// File @openzeppelin/contracts/token/ERC1155/extensions/IERC1155MetadataURI.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/extensions/IERC1155MetadataURI.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (token/ERC1155/extensions/IERC1155MetadataURI.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (token/ERC1155/extensions/IERC1155MetadataURI.sol)
 
+pragma solidity >=0.6.2;
 
 /**
  * @dev Interface of the optional ERC1155MetadataExtension interface, as defined
@@ -469,11 +674,12 @@ interface IERC1155MetadataURI is IERC1155 {
 }
 
 
-// File @openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (token/ERC1155/IERC1155Receiver.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (token/ERC1155/IERC1155Receiver.sol)
 
+pragma solidity >=0.6.2;
 
 /**
  * @dev Interface that must be implemented by smart contracts in order to receive
@@ -529,11 +735,12 @@ interface IERC1155Receiver is IERC165 {
 }
 
 
-// File @openzeppelin/contracts/token/ERC1155/utils/ERC1155Utils.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/utils/ERC1155Utils.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.3.0) (token/ERC1155/utils/ERC1155Utils.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (token/ERC1155/utils/ERC1155Utils.sol)
 
+pragma solidity ^0.8.20;
 
 
 /**
@@ -572,7 +779,7 @@ library ERC1155Utils {
                     revert IERC1155Errors.ERC1155InvalidReceiver(to);
                 } else {
                     assembly ("memory-safe") {
-                        revert(add(32, reason), mload(reason))
+                        revert(add(reason, 0x20), mload(reason))
                     }
                 }
             }
@@ -609,7 +816,7 @@ library ERC1155Utils {
                     revert IERC1155Errors.ERC1155InvalidReceiver(to);
                 } else {
                     assembly ("memory-safe") {
-                        revert(add(32, reason), mload(reason))
+                        revert(add(reason, 0x20), mload(reason))
                     }
                 }
             }
@@ -618,11 +825,12 @@ library ERC1155Utils {
 }
 
 
-// File @openzeppelin/contracts/utils/Comparators.sol@v5.3.0
+// File @openzeppelin/contracts/utils/Comparators.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (utils/Comparators.sol)
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Provides a set of functions to compare values.
@@ -640,12 +848,13 @@ library Comparators {
 }
 
 
-// File @openzeppelin/contracts/utils/math/SafeCast.sol@v5.3.0
+// File @openzeppelin/contracts/utils/math/SafeCast.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (utils/math/SafeCast.sol)
 // This file was procedurally generated from scripts/generate/templates/SafeCast.js.
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Wrappers over Solidity's uintXX/intXX/bool casting operators with added overflow
@@ -1805,11 +2014,12 @@ library SafeCast {
 }
 
 
-// File @openzeppelin/contracts/utils/Panic.sol@v5.3.0
+// File @openzeppelin/contracts/utils/Panic.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (utils/Panic.sol)
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Helper library for emitting standardized panic codes.
@@ -1865,11 +2075,12 @@ library Panic {
 }
 
 
-// File @openzeppelin/contracts/utils/math/Math.sol@v5.3.0
+// File @openzeppelin/contracts/utils/math/Math.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.3.0) (utils/math/Math.sol)
 
+pragma solidity ^0.8.20;
 
 
 /**
@@ -2615,12 +2826,13 @@ library Math {
 }
 
 
-// File @openzeppelin/contracts/utils/SlotDerivation.sol@v5.3.0
+// File @openzeppelin/contracts/utils/SlotDerivation.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.3.0) (utils/SlotDerivation.sol)
 // This file was procedurally generated from scripts/generate/templates/SlotDerivation.js.
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Library for computing storage (and transient storage) locations from namespaces and deriving slots
@@ -2773,12 +2985,13 @@ library SlotDerivation {
 }
 
 
-// File @openzeppelin/contracts/utils/StorageSlot.sol@v5.3.0
+// File @openzeppelin/contracts/utils/StorageSlot.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (utils/StorageSlot.sol)
 // This file was procedurally generated from scripts/generate/templates/StorageSlot.js.
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Library for reading and writing primitive types to specific storage slots.
@@ -2919,12 +3132,13 @@ library StorageSlot {
 }
 
 
-// File @openzeppelin/contracts/utils/Arrays.sol@v5.3.0
+// File @openzeppelin/contracts/utils/Arrays.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.3.0) (utils/Arrays.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (utils/Arrays.sol)
 // This file was procedurally generated from scripts/generate/templates/Arrays.js.
 
+pragma solidity ^0.8.20;
 
 
 
@@ -3339,6 +3553,32 @@ library Arrays {
      *
      * WARNING: Only use if you are certain `pos` is lower than the array length.
      */
+    function unsafeAccess(bytes[] storage arr, uint256 pos) internal pure returns (StorageSlot.BytesSlot storage) {
+        bytes32 slot;
+        assembly ("memory-safe") {
+            slot := arr.slot
+        }
+        return slot.deriveArray().offset(pos).getBytesSlot();
+    }
+
+    /**
+     * @dev Access an array in an "unsafe" way. Skips solidity "index-out-of-range" check.
+     *
+     * WARNING: Only use if you are certain `pos` is lower than the array length.
+     */
+    function unsafeAccess(string[] storage arr, uint256 pos) internal pure returns (StorageSlot.StringSlot storage) {
+        bytes32 slot;
+        assembly ("memory-safe") {
+            slot := arr.slot
+        }
+        return slot.deriveArray().offset(pos).getStringSlot();
+    }
+
+    /**
+     * @dev Access an array in an "unsafe" way. Skips solidity "index-out-of-range" check.
+     *
+     * WARNING: Only use if you are certain `pos` is lower than the array length.
+     */
     function unsafeMemoryAccess(address[] memory arr, uint256 pos) internal pure returns (address res) {
         assembly {
             res := mload(add(add(arr, 0x20), mul(pos, 0x20)))
@@ -3362,6 +3602,28 @@ library Arrays {
      * WARNING: Only use if you are certain `pos` is lower than the array length.
      */
     function unsafeMemoryAccess(uint256[] memory arr, uint256 pos) internal pure returns (uint256 res) {
+        assembly {
+            res := mload(add(add(arr, 0x20), mul(pos, 0x20)))
+        }
+    }
+
+    /**
+     * @dev Access an array in an "unsafe" way. Skips solidity "index-out-of-range" check.
+     *
+     * WARNING: Only use if you are certain `pos` is lower than the array length.
+     */
+    function unsafeMemoryAccess(bytes[] memory arr, uint256 pos) internal pure returns (bytes memory res) {
+        assembly {
+            res := mload(add(add(arr, 0x20), mul(pos, 0x20)))
+        }
+    }
+
+    /**
+     * @dev Access an array in an "unsafe" way. Skips solidity "index-out-of-range" check.
+     *
+     * WARNING: Only use if you are certain `pos` is lower than the array length.
+     */
+    function unsafeMemoryAccess(string[] memory arr, uint256 pos) internal pure returns (string memory res) {
         assembly {
             res := mload(add(add(arr, 0x20), mul(pos, 0x20)))
         }
@@ -3399,42 +3661,37 @@ library Arrays {
             sstore(array.slot, len)
         }
     }
-}
 
-
-// File @openzeppelin/contracts/utils/introspection/ERC165.sol@v5.3.0
-
-// Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (utils/introspection/ERC165.sol)
-
-
-/**
- * @dev Implementation of the {IERC165} interface.
- *
- * Contracts that want to implement ERC-165 should inherit from this contract and override {supportsInterface} to check
- * for the additional interface id that will be supported. For example:
- *
- * ```solidity
- * function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
- *     return interfaceId == type(MyInterface).interfaceId || super.supportsInterface(interfaceId);
- * }
- * ```
- */
-abstract contract ERC165 is IERC165 {
     /**
-     * @dev See {IERC165-supportsInterface}.
+     * @dev Helper to set the length of a dynamic array. Directly writing to `.length` is forbidden.
+     *
+     * WARNING: this does not clear elements if length is reduced, of initialize elements if length is increased.
      */
-    function supportsInterface(bytes4 interfaceId) public view virtual returns (bool) {
-        return interfaceId == type(IERC165).interfaceId;
+    function unsafeSetLength(bytes[] storage array, uint256 len) internal {
+        assembly ("memory-safe") {
+            sstore(array.slot, len)
+        }
+    }
+
+    /**
+     * @dev Helper to set the length of a dynamic array. Directly writing to `.length` is forbidden.
+     *
+     * WARNING: this does not clear elements if length is reduced, of initialize elements if length is increased.
+     */
+    function unsafeSetLength(string[] storage array, uint256 len) internal {
+        assembly ("memory-safe") {
+            sstore(array.slot, len)
+        }
     }
 }
 
 
-// File @openzeppelin/contracts/token/ERC1155/ERC1155.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/ERC1155.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (token/ERC1155/ERC1155.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (token/ERC1155/ERC1155.sol)
 
+pragma solidity ^0.8.20;
 
 
 
@@ -3465,9 +3722,7 @@ abstract contract ERC1155 is Context, ERC165, IERC1155, IERC1155MetadataURI, IER
         _setURI(uri_);
     }
 
-    /**
-     * @dev See {IERC165-supportsInterface}.
-     */
+    /// @inheritdoc IERC165
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
         return
             interfaceId == type(IERC1155).interfaceId ||
@@ -3489,9 +3744,7 @@ abstract contract ERC1155 is Context, ERC165, IERC1155, IERC1155MetadataURI, IER
         return _uri;
     }
 
-    /**
-     * @dev See {IERC1155-balanceOf}.
-     */
+    /// @inheritdoc IERC1155
     function balanceOf(address account, uint256 id) public view virtual returns (uint256) {
         return _balances[id][account];
     }
@@ -3520,23 +3773,17 @@ abstract contract ERC1155 is Context, ERC165, IERC1155, IERC1155MetadataURI, IER
         return batchBalances;
     }
 
-    /**
-     * @dev See {IERC1155-setApprovalForAll}.
-     */
+    /// @inheritdoc IERC1155
     function setApprovalForAll(address operator, bool approved) public virtual {
         _setApprovalForAll(_msgSender(), operator, approved);
     }
 
-    /**
-     * @dev See {IERC1155-isApprovedForAll}.
-     */
+    /// @inheritdoc IERC1155
     function isApprovedForAll(address account, address operator) public view virtual returns (bool) {
         return _operatorApprovals[account][operator];
     }
 
-    /**
-     * @dev See {IERC1155-safeTransferFrom}.
-     */
+    /// @inheritdoc IERC1155
     function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes memory data) public virtual {
         address sender = _msgSender();
         if (from != sender && !isApprovedForAll(from, sender)) {
@@ -3545,9 +3792,7 @@ abstract contract ERC1155 is Context, ERC165, IERC1155, IERC1155MetadataURI, IER
         _safeTransferFrom(from, to, id, value, data);
     }
 
-    /**
-     * @dev See {IERC1155-safeBatchTransferFrom}.
-     */
+    /// @inheritdoc IERC1155
     function safeBatchTransferFrom(
         address from,
         address to,
@@ -3832,11 +4077,12 @@ abstract contract ERC1155 is Context, ERC165, IERC1155, IERC1155MetadataURI, IER
 }
 
 
-// File @openzeppelin/contracts/utils/math/SignedMath.sol@v5.3.0
+// File @openzeppelin/contracts/utils/math/SignedMath.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (utils/math/SignedMath.sol)
 
+pragma solidity ^0.8.20;
 
 /**
  * @dev Standard signed math utilities missing in the Solidity language.
@@ -3901,11 +4147,12 @@ library SignedMath {
 }
 
 
-// File @openzeppelin/contracts/utils/Strings.sol@v5.3.0
+// File @openzeppelin/contracts/utils/Strings.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.3.0) (utils/Strings.sol)
+// OpenZeppelin Contracts (last updated v5.4.0) (utils/Strings.sol)
 
+pragma solidity ^0.8.20;
 
 
 
@@ -3950,7 +4197,7 @@ library Strings {
             string memory buffer = new string(length);
             uint256 ptr;
             assembly ("memory-safe") {
-                ptr := add(buffer, add(32, length))
+                ptr := add(add(buffer, 0x20), length)
             }
             while (true) {
                 ptr--;
@@ -4386,17 +4633,18 @@ library Strings {
     function _unsafeReadBytesOffset(bytes memory buffer, uint256 offset) private pure returns (bytes32 value) {
         // This is not memory safe in the general case, but all calls to this private function are within bounds.
         assembly ("memory-safe") {
-            value := mload(add(buffer, add(0x20, offset)))
+            value := mload(add(add(buffer, 0x20), offset))
         }
     }
 }
 
 
-// File @openzeppelin/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol@v5.3.0
+// File @openzeppelin/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol@v5.4.0
 
 // Original license: SPDX_License_Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.1.0) (token/ERC1155/extensions/ERC1155URIStorage.sol)
 
+pragma solidity ^0.8.20;
 
 
 /**
@@ -4454,15 +4702,70 @@ abstract contract ERC1155URIStorage is ERC1155 {
 }
 
 
-// SPDX-License-Identifier: MIT
+// File contracts/LHISA_LecceNFT.sol
+
+// Original license: SPDX_License_Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155URIStorage.sol";
-import "@openzeppelin/contracts/token/common/ERC2981.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+// --- Libreria espansa: ReentrancyGuard ---
+abstract contract ReentrancyGuard {
+    uint256 private constant NOT_ENTERED = 1;
+    uint256 private constant ENTERED = 2;
+
+    uint256 private _status;
+
+    error ReentrancyGuardReentrantCall();
+
+    constructor() {
+        _status = NOT_ENTERED;
+    }
+
+    modifier nonReentrant() {
+        if (_status == ENTERED) revert ReentrancyGuardReentrantCall();
+        _status = ENTERED;
+        _;
+        _status = NOT_ENTERED;
+    }
+}
+
+// --- Libreria espansa: Pausable ---
+abstract contract Pausable is Ownable {
+    event Paused(address account);
+    event Unpaused(address account);
+
+    bool private _paused;
+
+    constructor() {
+        _paused = false;
+    }
+
+    function paused() public view returns (bool) {
+        return _paused;
+    }
+
+    modifier whenNotPaused() {
+        require(!_paused, "Pausable: paused");
+        _;
+    }
+
+    modifier whenPaused() {
+        require(_paused, "Pausable: not paused");
+        _;
+    }
+
+    function _pause() internal whenNotPaused {
+        _paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function _unpause() internal whenPaused {
+        _paused = false;
+        emit Unpaused(msg.sender);
+    }
+}
+
+
+
 
 contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard, ERC2981 {
     string public name = "LHISA-LecceNFT";
@@ -4473,24 +4776,25 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
     mapping(uint256 => uint256) public pricesInWei;
     mapping(uint256 => bool) public isValidTokenId;
     mapping(uint256 => string) public encryptedURIs;
+    /// @notice Valore informativo in euro per ciascun tokenId (NON aggiornato automaticamente in base al cambio ETH/EUR)
+    
+mapping(uint256 => uint256) public euroValueForTokenId;
+
     mapping(uint256 => string) public tokenCIDs;
 
     address public withdrawWallet;
     address public creatorWallet;
     uint256 public creatorSharePercentage;
-
+    uint96 public defaultRoyaltyFeeNumerator;
     string public baseURI;
-
-    // --- Whitelist ---
+    
     bool public whitelistActive = false;
     mapping(address => bool) public whitelist;
 
-    // --- Limitazione mint tokenID 100 ---
     bool public limitToken100Active;
     mapping(address => uint256) public lastMintTimeToken100;
     mapping(address => uint256) public mintedToken100Last24h;
 
-    // --- Governance ---
     struct Proposal {
         string description;
         uint256 startTime;
@@ -4498,6 +4802,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         uint256 yesVotes;
         uint256 noVotes;
         bool active;
+        bool allowNewMintsToVote;
         mapping(address => uint256) balancesSnapshot;
     }
     mapping(uint256 => Proposal) public proposals;
@@ -4514,7 +4819,6 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
 
     uint256 public constant MINIMUM_TOTAL_VALUE = 84000;
 
-    // --- Eventi ---
     event NFTMinted(address indexed buyer, uint256 tokenId, uint256 quantity, uint256 price, string encryptedURI);
     event FundsWithdrawn(address indexed owner, uint256 amount);
     event BaseURIUpdated(string newBaseURI);
@@ -4559,14 +4863,57 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
             maxSupply[i] = 2000;
             isValidTokenId[i] = true;
         }
-
-        // Inizializza i tokenCIDs e encryptedURIs qui...
-
-        // Royalties default (5%)
+        tokenCIDs[100] = "bafybeibzvith6ji34mzhb7mgdtascuhvczxvg3yyt73prlzg7n4t56qhhe";
+        encryptedURIs[100] = "bafybeibzvith6ji34mzhb7mgdtascuhvczxvg3yyt73prlzg7n4t56qhhe";
+        tokenCIDs[95] = "bafybeiarkwmmlxudlutqyw6jhrln3kkq7uzhendqnmhrtvtsu5gyrz62hm";
+        encryptedURIs[95] = "bafybeiarkwmmlxudlutqyw6jhrln3kkq7uzhendqnmhrtvtsu5gyrz62hm";
+        tokenCIDs[90] = "bafybeides3vx3ibatjjrm3wr22outg6gxclmsnerkydx3njjcm64tik3we";
+        encryptedURIs[90] = "bafybeides3vx3ibatjjrm3wr22outg6gxclmsnerkydx3njjcm64tik3we";
+        tokenCIDs[85] = "bafybeif4pdz2jhwlgnnonqti7reqyvszwjja45uimijzd47coilmj6jmvm";
+        encryptedURIs[85] = "bafybeif4pdz2jhwlgnnonqti7reqyvszwjja45uimijzd47coilmj6jmvm";
+        tokenCIDs[80] = "bafybeiboe3heopn3ki57hkbdkb4uep6mvbwlcyh4q6frcl2fqnmucswp3u";
+        encryptedURIs[80] = "bafybeiboe3heopn3ki57hkbdkb4uep6mvbwlcyh4q6frcl2fqnmucswp3u";
+        tokenCIDs[75] = "bafybeicgqdtiilzd23o2hhvb2kxfshjnyvxnwcic7eyftjfpalkokvm7di";
+        encryptedURIs[75] = "bafybeicgqdtiilzd23o2hhvb2kxfshjnyvxnwcic7eyftjfpalkokvm7di";
+        tokenCIDs[70] = "bafybeih6gfu4hss72sqjoszdsla6mioo2fbaam2jeqn7y6saihydtvjqam";
+        encryptedURIs[70] = "bafybeih6gfu4hss72sqjoszdsla6mioo2fbaam2jeqn7y6saihydtvjqam";
+        tokenCIDs[65] = "bafybeidyqyawcirrqbauf3daygvgmoqzq63duhsl6auw7fbfma4xlnj7cy";
+        encryptedURIs[65] = "bafybeidyqyawcirrqbauf3daygvgmoqzq63duhsl6auw7fbfma4xlnj7cy";
+        tokenCIDs[60] = "bafybeift6clex5dhe6unqqhcstdn4l3votj5uvuoiwpa5rwlsh6jovpeti";
+        encryptedURIs[60] = "bafybeift6clex5dhe6unqqhcstdn4l3votj5uvuoiwpa5rwlsh6jovpeti";
+        tokenCIDs[55] = "bafybeihhmmci3qjz55j3g5y33yhszt5fpbwmsnx4fbzklgkyofhsxn3bte";
+        encryptedURIs[55] = "bafybeihhmmci3qjz55j3g5y33yhszt5fpbwmsnx4fbzklgkyofhsxn3bte";
+        tokenCIDs[50] = "bafybeiaexxgiukd46px63gjvggltykt3uoqs74ryvj5x577uvge66ntr2q";
+        encryptedURIs[50] = "bafybeiaexxgiukd46px63gjvggltykt3uoqs74ryvj5x577uvge66ntr2q";
+        tokenCIDs[45] = "bafybeicspxdws7au6kdms6lfpfhggqxdpfkrzmrvsue7kvii5ncfk7d7tq";
+        encryptedURIs[45] = "bafybeicspxdws7au6kdms6lfpfhggqxdpfkrzmrvsue7kvii5ncfk7d7tq";
+        tokenCIDs[40] = "bafybeibuga3bq442mvnqrjyazhbhd2k3oek3bgevaja7jxla5to72cqeri";
+        encryptedURIs[40] = "bafybeibuga3bq442mvnqrjyazhbhd2k3oek3bgevaja7jxla5to72cqeri";
+        tokenCIDs[35] = "bafybeif2titfww7kqsggfocbtmm6smu5qmw7hwthaahaxjc7xzs2yf5yqq";
+        encryptedURIs[35] = "bafybeif2titfww7kqsggfocbtmm6smu5qmw7hwthaahaxjc7xzs2yf5yqq";
+        tokenCIDs[30] = "bafybeieqbykqxdjskgch5vtgkucvyvrbjtucpid47lwa3r3aejjc3xvbda";
+        encryptedURIs[30] = "bafybeieqbykqxdjskgch5vtgkucvyvrbjtucpid47lwa3r3aejjc3xvbda";
+        tokenCIDs[25] = "bafybeibo26hejdplqocrgxtg33lgdasqjuzzwkbs6cdrg7hdrkhehskukm";
+        encryptedURIs[25] = "bafybeibo26hejdplqocrgxtg33lgdasqjuzzwkbs6cdrg7hdrkhehskukm";
+        tokenCIDs[20] = "bafybeibk63t4vnlqpimomeeylnam2b52qdfdcx5bcfdxqtyiod2d6qnomy";
+        encryptedURIs[20] = "bafybeibk63t4vnlqpimomeeylnam2b52qdfdcx5bcfdxqtyiod2d6qnomy";
+        tokenCIDs[15] = "bafybeiek35bzmmhop35isxwade6ezfgsb466mhwoxr27zfwlly7etvpqo4";
+        encryptedURIs[15] = "bafybeiek35bzmmhop35isxwade6ezfgsb466mhwoxr27zfwlly7etvpqo4";
+        tokenCIDs[10] = "bafybeigpqqaoft52a7dp2kkzcn5zapig7zgftcfrt2fbiqqnm55mwut6lq";
+        encryptedURIs[10] = "bafybeigpqqaoft52a7dp2kkzcn5zapig7zgftcfrt2fbiqqnm55mwut6lq";
+        tokenCIDs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
+        encryptedURIs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
+        
+        // Valore informativo in euro per ogni tokenId (SOLO a scopo informativo, NON aggiornato con cambio ETH/EUR)
+        euroValueForTokenId[100] = 2;    // 100 LHI = 2 euro
+        euroValueForTokenId[50]  = 1;    // 50 LHI  = 1 euro
+        euroValueForTokenId[10]  = 0;    // 10 LHI  = 0 euro
+        
         _setDefaultRoyalty(_creatorWalletAddress, 500);
+        defaultRoyaltyFeeNumerator = 500;
     }
 
-    // ----------- Whitelist controls -----------
+    // --- Whitelist controls ---
     function setWhitelist(address[] calldata addresses, bool status) external onlyOwner {
         for (uint256 i = 0; i < addresses.length; ++i) {
             whitelist[addresses[i]] = status;
@@ -4577,11 +4924,11 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit WhitelistStatusChanged(status);
     }
 
-    // ----------- Pausable controls -----------
+    // --- Pausable controls ---
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
-    // ----------- Limitazione futura mint 100 -----------
+    // --- Limitazione futura mint 100 ---
     function setLimitToken100Active(bool active) external onlyOwner {
         limitToken100Active = active;
         emit LimitToken100ActiveChanged(active);
@@ -4597,7 +4944,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         mintedToken100Last24h[user] += quantity;
     }
 
-    // ----------- Mint (singolo) -----------
+    // --- Mint (singolo) ---
     function mintNFT(uint256 tokenId, uint256 quantity) external payable whenNotPaused nonReentrant {
         if (whitelistActive) {
             require(whitelist[msg.sender], "Not whitelisted for mint");
@@ -4624,7 +4971,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit NFTMinted(msg.sender, tokenId, quantity, pricesInWei[tokenId], encryptedURIs[tokenId]);
     }
 
-    // ----------- Batch Mint -----------
+    // --- Batch Mint ---
     function mintBatchNFT(uint256[] calldata tokenIds, uint256[] calldata quantities) external payable whenNotPaused nonReentrant {
         if (whitelistActive) {
             require(whitelist[msg.sender], "Not whitelisted for mint");
@@ -4660,17 +5007,18 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         }
     }
 
-    // ----------- Burn -----------
+    // --- Burn ---
     function burn(address account, uint256 tokenId, uint256 quantity) external whenNotPaused {
         require(
             account == msg.sender || isApprovedForAll(account, msg.sender),
             "Caller is not owner nor approved"
         );
         _burn(account, tokenId, quantity);
+        totalMinted[tokenId] -= quantity;
         emit NFTBurned(account, tokenId, quantity);
     }
 
-    // ----------- Withdraw -----------
+    // --- Withdraw ---
     function withdraw() external onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
         require(balance > 0, "Nothing to withdraw");
@@ -4678,19 +5026,23 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         require(sent, "Withdraw failed");
         emit FundsWithdrawn(withdrawWallet, balance);
     }
-
-    // ----------- Governance: Proposal & voto quadratico con snapshot ----------
+    
+        // --- Governance: Proposal & voto quadratico con snapshot ---
     function createProposal(
         string calldata description,
         uint256 startTime,
-        uint256 endTime
+        uint256 endTime,
+        bool allowNewMintsToVote
     ) external onlyOwner {
         require(startTime < endTime, "Start must be before end");
         Proposal storage prop = proposals[nextProposalId];
         prop.description = description;
         prop.startTime = startTime;
         prop.endTime = endTime;
+        prop.yesVotes = 0;
+        prop.noVotes = 0;
         prop.active = true;
+        prop.allowNewMintsToVote = allowNewMintsToVote;
         emit ProposalCreated(nextProposalId, description, startTime, endTime);
         nextProposalId++;
     }
@@ -4702,7 +5054,6 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         require(block.timestamp >= prop.startTime && block.timestamp <= prop.endTime, "Voting not allowed at this time");
         require(!hasVoted[proposalId][msg.sender], "Already voted");
 
-        // Snapshot all'atto del primo voto
         if (prop.balancesSnapshot[msg.sender] == 0) {
             uint256 balance = 0;
             for (uint256 i = 5; i <= 100; i += 5) {
@@ -4722,6 +5073,71 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         emit Voted(proposalId, msg.sender, support, voteWeight);
     }
 
+    function endProposal(uint256 proposalId) external onlyOwner {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.active, "Proposal not active");
+        require(block.timestamp > proposal.endTime, "Voting period has not ended yet");
+        proposal.active = false;
+    }
+
+    function getProposalResults(uint256 proposalId) public view returns (string memory description, uint256 yesVotes, uint256 noVotes, bool active, uint256 startTime, uint256 endTime) {
+        Proposal storage proposal = proposals[proposalId];
+        return (proposal.description, proposal.yesVotes, proposal.noVotes, proposal.active, proposal.startTime, proposal.endTime);
+    }
+
+    // --- Burn Request ---
+    function requestBurn(uint256 tokenId, uint256 quantity) external {
+        require(isValidTokenId[tokenId], "Invalid tokenId");
+        require(balanceOf(msg.sender, tokenId) >= quantity, "Insufficient balance");
+
+        burnRequests.push(BurnRequest({
+            requester: msg.sender,
+            tokenId: tokenId,
+            quantity: quantity,
+            approved: false
+        }));
+        uint256 requestId = burnRequests.length - 1;
+        emit BurnRequested(msg.sender, tokenId, quantity, requestId);
+    }
+
+    function approveBurn(uint256 requestId, bool approve) external onlyOwner {
+        require(requestId < burnRequests.length, "Invalid requestId");
+        BurnRequest storage request = burnRequests[requestId];
+        require(!request.approved, "Request already processed");
+
+        if (approve) {
+            uint256 totalValueAfterBurn = calculateTotalValueAfterBurn(request.tokenId, request.quantity);
+            require(totalValueAfterBurn >= MINIMUM_TOTAL_VALUE, "Cannot burn below minimum total value");
+            _burn(request.requester, request.tokenId, request.quantity);
+            totalMinted[request.tokenId] -= request.quantity;
+            request.approved = true;
+            emit BurnApproved(requestId, request.requester, request.tokenId, request.quantity);
+        } else {
+            emit BurnDenied(requestId, request.requester, request.tokenId, request.quantity);
+        }
+    }
+
+    function calculateTotalValueAfterBurn(uint256 tokenId, uint256 quantity) public view returns (uint256) {
+        uint256 totalValue = 0;
+        uint256[] memory mintedTokens = new uint256[](20);
+        uint256 idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            mintedTokens[idx] = totalMinted[i];
+            idx++;
+        }
+        uint256 tokenArrayIndex = (tokenId / 5) - 1;
+        require(tokenArrayIndex < 20, "Token ID not in burn calculation range");
+        mintedTokens[tokenArrayIndex] -= quantity;
+
+        idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            totalValue += mintedTokens[idx] * pricesInWei[i];
+            idx++;
+        }
+        return totalValue;
+    }
+
+    // --- Utility Functions ---
     function sqrt(uint256 x) internal pure returns (uint256 y) {
         if (x == 0) return 0;
         uint256 z = (x + 1) / 2;
@@ -4730,9 +5146,10 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
             y = z;
             z = (x / z + z) / 2;
         }
+        return y;
     }
 
-    // ----------- Aggiorna Prezzi e Wallet con eventi -----------
+    // --- Aggiorna Prezzi e Wallet con eventi ---
     function updatePrice(uint256 tokenId, uint256 newPrice) external onlyOwner {
         require(isValidTokenId[tokenId], "Invalid tokenId");
         uint256 oldPrice = pricesInWei[tokenId];
@@ -4745,26 +5162,27 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         withdrawWallet = newWallet;
         emit WithdrawWalletChanged(old, newWallet);
     }
+
     function updateCreatorWallet(address newWallet) external onlyOwner {
         require(newWallet != address(0), "Invalid wallet");
         address old = creatorWallet;
         creatorWallet = newWallet;
         emit CreatorWalletChanged(old, newWallet);
-        _setDefaultRoyalty(newWallet, royaltyInfo(0).royaltyFraction);
+        _setDefaultRoyalty(newWallet, defaultRoyaltyFeeNumerator);
     }
-
-    // ----------- Royalties ERC2981 -----------
+    
+    // --- Royalties ERC2981 ---
     function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
         _setDefaultRoyalty(receiver, feeNumerator);
-    }
+        defaultRoyaltyFeeNumerator = feeNumerator;
+    }    
 
-    // ----------- ERC1155 URI -----------
+    // --- ERC1155 URI ---
     function uri(uint256 tokenId) public view override returns (string memory) {
         require(isValidTokenId[tokenId], "The provided tokenId is not supported");
         return string(abi.encodePacked(baseURI, Strings.toString(tokenId), ".json"));
     }
 
-    // ----------- ERC165 Support -----------
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -4775,8 +5193,7 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         return super.supportsInterface(interfaceId);
     }
 
-    // ----------- Funzioni Owner per aggiornare baseURI, tokenCIDs ed encryptedURIs -----------
-
+    // --- Funzioni Owner per aggiornare baseURI, tokenCIDs ed encryptedURIs ---
     function setBaseURI(string memory newBaseURI) external onlyOwner {
         baseURI = newBaseURI;
         emit BaseURIUpdated(newBaseURI);
@@ -4810,5 +5227,39 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
             encryptedURIs[tokenIds[i]] = newEncryptedURIs[i];
         }
         emit EncryptedURIsUpdated(tokenIds, newEncryptedURIs);
+    }
+
+    // --- Funzioni di lettura pubblica per trasparenza ---
+    function getTokenCID(uint256 tokenId) public view returns (string memory) {
+        return tokenCIDs[tokenId];
+    }
+    function getEncryptedURI(uint256 tokenId) public view returns (string memory) {
+        return encryptedURIs[tokenId];
+    }
+    function getAllTokenCIDs() public view returns (string[] memory) {
+        string[] memory cids = new string[](20);
+        uint256 idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            cids[idx] = tokenCIDs[i];
+            idx++;
+        }
+        return cids;
+    }
+    function getAllEncryptedURIs() public view returns (string[] memory) {
+        string[] memory uris = new string[](20);
+        uint256 idx = 0;
+        for (uint256 i = 5; i <= 100; i += 5) {
+            uris[idx] = encryptedURIs[i];
+            idx++;
+        }
+        return uris;
+    }
+    
+    receive() external payable {
+        revert("Direct ETH transfers not allowed");
+    }
+    
+    fallback() external payable {
+        revert("Fallback not allowed");
     }
 }

@@ -229,17 +229,16 @@ mapping(uint256 => uint256) public euroValueForTokenId;
         limitToken100Active = active;
         emit LimitToken100ActiveChanged(active);
     }
-    function _checkMintLimitToken100(address user, uint256 quantity) internal {
-        if (!limitToken100Active) return;
+    function _checkMintLimitToken100(address user, uint256 quantity) internal view returns (bool) { // Ora restituisce un bool
+        if (!limitToken100Active) return true; // Restituisce esplicitamente true
         uint256 nowTime = block.timestamp;
-        if (nowTime - lastMintTimeToken100[user] > 1 days) {
-            mintedToken100Last24h[user] = 0;
-            lastMintTimeToken100[user] = nowTime;
-        }
-        require(mintedToken100Last24h[user] + quantity <= 100, "Mint limit for token 100 exceeded in 24h");
-        mintedToken100Last24h[user] += quantity;
+           if (nowTime - lastMintTimeToken100[user] > 1 days) {
+           mintedToken100Last24h[user] = 0;
+           lastMintTimeToken100[user] = nowTime;
+           }
+           require(mintedToken100Last24h[user] + quantity <= 100, "Mint limit for token 100 exceeded in 24h");
+           return true; // Restituisce true se tutti i controlli passano
     }
-
     // --- Mint (singolo) ---
     function mintNFT(uint256 tokenId, uint256 quantity) external payable whenNotPaused nonReentrant {
         if (whitelistActive) {
