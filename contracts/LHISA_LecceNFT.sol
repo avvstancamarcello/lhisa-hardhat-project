@@ -72,6 +72,10 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
     mapping(uint256 => uint256) public pricesInWei;
     mapping(uint256 => bool) public isValidTokenId;
     mapping(uint256 => string) public encryptedURIs;
+    /// @notice Valore informativo in euro per ciascun tokenId (NON aggiornato automaticamente in base al cambio ETH/EUR)
+    
+mapping(uint256 => uint256) public euroValueForTokenId;
+
     mapping(uint256 => string) public tokenCIDs;
 
     address public withdrawWallet;
@@ -195,7 +199,12 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         encryptedURIs[10] = "bafybeigpqqaoft52a7dp2kkzcn5zapig7zgftcfrt2fbiqqnm55mwut6lq";
         tokenCIDs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
         encryptedURIs[5] = "bafybeickzstleqd6hnjcsvp7bjc6tbsu7jqhmwzubws5qu7r64e3h4zhyq";
-
+        
+        // Valore informativo in euro per ogni tokenId (SOLO a scopo informativo, NON aggiornato con cambio ETH/EUR)
+        euroValueForTokenId[100] = 2;    // 100 LHI = 2 euro
+        euroValueForTokenId[50]  = 1;    // 50 LHI  = 1 euro
+        euroValueForTokenId[10]  = 0;    // 10 LHI  = 0 euro
+        
         _setDefaultRoyalty(_creatorWalletAddress, 500);
         defaultRoyaltyFeeNumerator = 500;
     }
@@ -458,12 +467,11 @@ contract LHISA_LecceNFT is ERC1155URIStorage, Ownable, Pausable, ReentrancyGuard
         _setDefaultRoyalty(newWallet, defaultRoyaltyFeeNumerator);
     }
     
-        // --- Royalties ERC2981 ---
+    // --- Royalties ERC2981 ---
     function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyOwner {
-    _setDefaultRoyalty(receiver, feeNumerator);
-    defaultRoyaltyFeeNumerator = feeNumerator;
+        _setDefaultRoyalty(receiver, feeNumerator);
+        defaultRoyaltyFeeNumerator = feeNumerator;
     }    
-   }
 
     // --- ERC1155 URI ---
     function uri(uint256 tokenId) public view override returns (string memory) {
